@@ -1,0 +1,5 @@
+streamlit==1.28.0
+yfinance==0.2.66
+pandas-ta==0.3.14b0
+mplfinance==0.12.7a3
+pandas==2.1.3
