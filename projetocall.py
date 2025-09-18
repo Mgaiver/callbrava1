@@ -42,8 +42,9 @@ def carregar_e_processar_dados(ticker: str, start_date: date, end_date: date):
         return None
 
     # Lida com a inconsistência da API, que às vezes retorna o nome do ativo nas colunas
-    # Se o número de colunas estiver correto (6), mas os nomes não, renomeia manualmente.
-    if len(df.columns) == 6 and all(col.lower() == ticker.lower() for col in df.columns):
+    # Converte os nomes das colunas para string de forma segura antes de comparar.
+    safe_columns = [str(col) for col in df.columns]
+    if len(safe_columns) == 6 and all(col.lower() == ticker.lower() for col in safe_columns):
         df.columns = ['Open', 'High', 'Low', 'Close', 'Adj Close', 'Volume']
 
     # Garante que as colunas estão com nomes padronizados de forma segura
@@ -289,4 +290,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
