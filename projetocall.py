@@ -81,7 +81,13 @@ def gerar_relatorio_analise(df: pd.DataFrame, ticker_name: str) -> str:
     """
     dados_atuais = df.iloc[-1]
     fechamento = dados_atuais['Close']
-    ifr = dados_atuais[f'RSI_{RSI_PERIOD}']
+    
+    # --- Verificação de segurança para o IFR ---
+    ifr_col = f'RSI_{RSI_PERIOD}'
+    if ifr_col not in dados_atuais or pd.isna(dados_atuais[ifr_col]):
+        return "Erro: Não foi possível calcular o IFR para o período solicitado. Tente um período mais longo."
+    ifr = dados_atuais[ifr_col]
+
 
     # Extrai os níveis de pivô com segurança
     pp, r1, s1, r2, s2 = dados_atuais.get('PP'), dados_atuais.get('R1'), dados_atuais.get('S1'), dados_atuais.get('R2'), dados_atuais.get('S2')
@@ -128,13 +134,24 @@ def gerar_relatorio_analise(df: pd.DataFrame, ticker_name: str) -> str:
     relatorio += f"### Análise de Indicadores\n"
     relatorio += f"O preço atual está entre o **Suporte 1 (R$ {s1:.2f})** e a **Resistência 1 (R$ {r1:.2f})**.\n"
     relatorio += f"- **Índice de Força Relativa (IFR):** {justificativa_ifr}\n"
-    relatorio += f"- **Bandas de Bollinger:** O preço está "
-    if fechamento > dados_atuais[f'BBU_{BBANDS_PERIOD}_2.0']:
-        relatorio += "**acima da banda superior**, indicando alta volatilidade ou possível sobre-compra."
-    elif fechamento < dados_atuais[f'BBL_{BBANDS_PERIOD}_2.0']:
-        relatorio += "**abaixo da banda inferior**, indicando alta volatilidade ou possível sobre-venda."
+    
+    # --- Análise das Bandas de Bollinger (com verificação de existência) ---
+    bbu_col = f'BBU_{BBANDS_PERIOD}_2.0'
+    bbl_col = f'BBL_{BBANDS_PERIOD}_2.0'
+
+    if bbu_col in dados_atuais and bbl_col in dados_atuais and pd.notna(dados_atuais[bbu_col]):
+        bbu = dados_atuais[bbu_col]
+        bbl = dados_atuais[bbl_col]
+        relatorio += f"- **Bandas de Bollinger:** O preço está "
+        if fechamento > bbu:
+            relatorio += f"**acima da banda superior** (R$ {bbu:.2f}), indicando alta volatilidade ou possível sobre-compra."
+        elif fechamento < bbl:
+            relatorio += f"**abaixo da banda inferior** (R$ {bbl:.2f}), indicando alta volatilidade ou possível sobre-venda."
+        else:
+            relatorio += f"**entre as bandas** (Superior: R$ {bbu:.2f}, Inferior: R$ {bbl:.2f})."
     else:
-        relatorio += f"**entre as bandas** (Superior: R$ {dados_atuais[f'BBU_{BBANDS_PERIOD}_2.0']:.2f}, Inferior: R$ {dados_atuais[f'BBL_{BBANDS_PERIOD}_2.0']:.2f})."
+        relatorio += "- **Bandas de Bollinger:** Não foi possível calcular para o período atual."
+    
     relatorio += "\n\n"
 
     relatorio += "### Recomendação\n"
@@ -281,4 +298,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
