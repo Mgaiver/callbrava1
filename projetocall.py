@@ -41,15 +41,22 @@ def carregar_e_processar_dados(ticker: str, start_date: date, end_date: date):
         st.error(f"Ocorreu um erro ao buscar os dados: {e}")
         return None
 
-    # Lida com a inconsistência da API, que às vezes retorna o nome do ativo nas colunas
-    # Converte os nomes das colunas para string de forma segura antes de comparar.
-    safe_columns = [str(col) for col in df.columns]
-    if len(safe_columns) == 6 and all(col.lower() == ticker.lower() for col in safe_columns):
-        df.columns = ['Open', 'High', 'Low', 'Close', 'Adj Close', 'Volume']
+    # --- LÓGICA DE LIMPEZA DE COLUNAS ROBUSTA ---
+    # yfinance pode retornar colunas como MultiIndex (tuplas) ou strings.
+    # Esta lógica lida com ambos os casos para extrair os nomes corretos.
+    cleaned_columns = []
+    for col in df.columns:
+        if isinstance(col, tuple):
+            # Se for uma tupla como ('High', 'PETR4.SA'), pegamos o primeiro elemento 'High'
+            cleaned_columns.append(col[0])
+        else:
+            # Se for uma string, apenas a usamos
+            cleaned_columns.append(str(col))
+    df.columns = cleaned_columns
 
-    # Garante que as colunas estão com nomes padronizados de forma segura
+    # Garante que as colunas estão com nomes padronizados (ex: 'open' -> 'Open')
     try:
-        df.columns = [str(col).strip().title() for col in df.columns]
+        df.columns = [col.strip().title() for col in df.columns]
     except Exception as e:
         st.error(f"Não foi possível padronizar os nomes das colunas. Erro: {e}")
         st.warning(f"Colunas recebidas do provedor de dados: {list(df.columns)}")
@@ -290,5 +297,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 
