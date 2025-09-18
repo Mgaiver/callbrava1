@@ -17,7 +17,6 @@ RSI_OVERBOUGHT = 65
 RSI_OVERSOLD = 35
 MA_FAST = 21
 MA_SLOW = 50
-BBANDS_PERIOD = 20
 
 # Lista de ativos populares para seleção rápida
 ATIVOS_POPULARES = [
@@ -42,9 +41,6 @@ def calcular_indicadores_tecnicos(df: pd.DataFrame) -> pd.DataFrame:
 
     # IFR (RSI)
     df.ta.rsi(length=RSI_PERIOD, append=True)
-
-    # Bandas de Bollinger
-    df.ta.bbands(length=BBANDS_PERIOD, append=True)
 
     # Média de Volume
     df['Volume Medio Mensal'] = df['Volume'].rolling(window=MA_FAST).mean()
@@ -133,27 +129,8 @@ def gerar_relatorio_analise(df: pd.DataFrame, ticker_name: str) -> str:
 
     relatorio += f"### Análise de Indicadores\n"
     relatorio += f"O preço atual está entre o **Suporte 1 (R$ {s1:.2f})** e a **Resistência 1 (R$ {r1:.2f})**.\n"
-    relatorio += f"- **Índice de Força Relativa (IFR):** {justificativa_ifr}\n"
+    relatorio += f"- **Índice de Força Relativa (IFR):** {justificativa_ifr}\n\n"
     
-    # --- Análise das Bandas de Bollinger (com verificação de existência) ---
-    bbu_col = f'BBU_{BBANDS_PERIOD}_2.0'
-    bbl_col = f'BBL_{BBANDS_PERIOD}_2.0'
-
-    if bbu_col in dados_atuais and bbl_col in dados_atuais and pd.notna(dados_atuais[bbu_col]):
-        bbu = dados_atuais[bbu_col]
-        bbl = dados_atuais[bbl_col]
-        relatorio += f"- **Bandas de Bollinger:** O preço está "
-        if fechamento > bbu:
-            relatorio += f"**acima da banda superior** (R$ {bbu:.2f}), indicando alta volatilidade ou possível sobre-compra."
-        elif fechamento < bbl:
-            relatorio += f"**abaixo da banda inferior** (R$ {bbl:.2f}), indicando alta volatilidade ou possível sobre-venda."
-        else:
-            relatorio += f"**entre as bandas** (Superior: R$ {bbu:.2f}, Inferior: R$ {bbl:.2f})."
-    else:
-        relatorio += "- **Bandas de Bollinger:** Não foi possível calcular para o período atual."
-    
-    relatorio += "\n\n"
-
     relatorio += "### Recomendação\n"
     if "NEUTRA" in recomendacao_acao:
         relatorio += "**Aguardar:** Não há um sinal claro de entrada no momento. Recomenda-se monitorar o ativo e esperar o preço se aproximar dos níveis de suporte/resistência com confirmação do IFR."
@@ -176,15 +153,18 @@ def plotar_grafico(df: pd.DataFrame, ativo_nome: str, theme: str = "Claro") -> b
     pivot_colors = ['blue', 'green', 'red', 'darkgreen', 'darkred']
     pivot_styles = [':', '--', '--', '-.', '-.']
 
-    # Adiciona plots dos indicadores
-    add_plots = [
-        # Bandas de Bollinger
-        mpf.make_addplot(df[[f'BBU_{BBANDS_PERIOD}_2.0', f'BBL_{BBANDS_PERIOD}_2.0']], color='purple', linestyle=':'),
-        # IFR no painel inferior
-        mpf.make_addplot(df[f'RSI_{RSI_PERIOD}'], panel=2, color='blue', ylabel=f'IFR({RSI_PERIOD})'),
-        mpf.make_addplot([RSI_OVERBOUGHT] * len(df), panel=2, color='red', linestyle='--'),
-        mpf.make_addplot([RSI_OVERSOLD] * len(df), panel=2, color='green', linestyle='--')
-    ]
+    # --- Adiciona plots dos indicadores (com verificação) ---
+    add_plots = []
+
+    # IFR no painel inferior
+    ifr_col = f'RSI_{RSI_PERIOD}'
+    if ifr_col in df.columns:
+        add_plots.extend([
+            mpf.make_addplot(df[ifr_col], panel=2, color='blue', ylabel=f'IFR({RSI_PERIOD})'),
+            mpf.make_addplot([RSI_OVERBOUGHT] * len(df), panel=2, color='red', linestyle='--'),
+            mpf.make_addplot([RSI_OVERSOLD] * len(df), panel=2, color='green', linestyle='--')
+        ])
+
 
     # Configuração de estilo do gráfico com base no tema
     if theme == "Escuro":
@@ -221,7 +201,7 @@ def plotar_grafico(df: pd.DataFrame, ativo_nome: str, theme: str = "Claro") -> b
 def main():
     st.set_page_config(page_title="Call Brava - Análise Técnica", layout="wide")
     st.title("📈 Call Brava")
-    st.markdown("Análise técnica simplificada para ativos da B3, baseada em Pontos de Pivô, IFR e Bandas de Bollinger.")
+    st.markdown("Análise técnica simplificada para ativos da B3, baseada em Pontos de Pivô e IFR.")
 
     # --- ENTRADA DO USUÁRIO NA BARRA LATERAL ---
     with st.sidebar:
@@ -290,7 +270,6 @@ def main():
                 """
                 **Legenda do Gráfico:**
                 - **Médias Móveis:** Laranja (curta, {} dias), Roxa (longa, {} dias).
-                - **Bandas de Bollinger:** Linhas roxas pontilhadas.
                 - **Níveis de Pivô:** R1/S1 (tracejadas), R2/S2 (traço-ponto).
                 """.format(MA_FAST, MA_SLOW)
             )
@@ -298,5 +277,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
 
 
