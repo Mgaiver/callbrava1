@@ -7,11 +7,71 @@ from datetime import date, timedelta
 from io import BytesIO
 from typing import Dict, List, Optional
 
-# =... existing code ...
+# =================================================================
+# 1. CONFIGURAÇÕES E CONSTANTES
+# =================================================================
+
+# Configurações dos indicadores técnicos
+RSI_PERIOD = 9
+RSI_OVERBOUGHT = 65
+RSI_OVERSOLD = 35
+MA_FAST = 21
+MA_SLOW = 50
+
+# Lista de ativos populares para seleção rápida
+ATIVOS_POPULARES = [
+    "PETR4", "VALE3", "ITUB4", "BBDC4", "ABEV3", "ELET3",
+    "BBAS3", "WEGE3", "MGLU3", "RENT3", "PRIO3", "SUZB3"
+]
+
+# =================================================================
+# 2. FUNÇÕES DE CÁLCULO E ANÁLISE
+# =================================================================
+
+def calcular_indicadores_tecnicos(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Adiciona um conjunto de indicadores técnicos ao DataFrame.
+    """
+    # Pontos de Pivô Clássico
+    df['PP'] = (df['High'] + df['Low'] + df['Close']) / 3
+    df['R1'] = (2 * df['PP']) - df['Low']
+    df['S1'] = (2 * df['PP']) - df['High']
+    df['R2'] = df['PP'] + (df['High'] - df['Low'])
+    df['S2'] = df['PP'] - (df['High'] - df['Low'])
+
+    # IFR (RSI)
+    df.ta.rsi(length=RSI_PERIOD, append=True)
+
+    # Média de Volume
+    df['Volume Medio Mensal'] = df['Volume'].rolling(window=MA_FAST).mean()
+
+    return df
+
+@st.cache_data(ttl="15m") # Adiciona cache para otimizar a performance
+def carregar_e_processar_dados(ticker: str, start_date: date, end_date: date) -> Optional[pd.DataFrame]:
+    """
+    Baixa os dados do ativo do yfinance e calcula todos os indicadores técnicos.
+    A anotação @st.cache_data impede que os dados sejam baixados novamente a cada interação.
+    """
+    try:
+        df = yf.download(ticker, start=start_date, end=end_date, auto_adjust=False)
+
+        if df.empty:
+            st.error(f"Erro: Não foram encontrados dados para o ativo '{ticker}'. Verifique o código.")
+            return None
+
+        # yfinance pode retornar colunas com MultiIndex, isso normaliza
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.droplevel(1)
+
+        df = calcular_indicadores_tecnicos(df)
+        return df
+
+    except Exception as e:
         st.error(f"Ocorreu um erro ao buscar os dados: {e}")
         return None
 
-def gerar_relatorio_analise(df: pd.DataFrame, ticker_name: str, analysis_timestamp: pd.Timestamp) -> str:
+def gerar_relatorio_analise(df: pd.DataFrame, ticker_name: str) -> str:
     """
     Gera um relatório estruturado com análise técnica, recomendação e níveis de preço.
     """
@@ -58,9 +118,7 @@ def gerar_relatorio_analise(df: pd.DataFrame, ticker_name: str, analysis_timesta
     # --- 2. Montagem do Relatório Estruturado ---
     relatorio = f"## Análise Técnica para {ticker_name.replace('.SA', '')}\n\n"
     relatorio += f"**Preço de Fechamento:** R$ {fechamento:.2f}\n"
-    relatorio += f"**Dados referentes ao fechamento de:** {df.index[-1].strftime('%d/%m/%Y')}\n"
-    relatorio += f"**Análise gerada em:** {analysis_timestamp.strftime('%d/%m/%Y às %H:%M')}\n"
-    relatorio += "**Fonte dos Dados:** Yahoo Finance\n\n"
+    relatorio += f"**Data da Análise:** {df.index[-1].strftime('%d/%m/%Y')}\n\n"
 
     relatorio += "### Níveis de Preço Chave (Pivô Clássico)\n"
     relatorio += f"- **Ponto de Pivô (PP):** R$ {pp:.2f}\n"
@@ -85,19 +143,14 @@ def gerar_relatorio_analise(df: pd.DataFrame, ticker_name: str, analysis_timesta
 
 def plotar_grafico(df: pd.DataFrame, ativo_nome: str, theme: str = "Claro") -> bytes:
     """
-    Gera o gráfico de candlestick e o retorna como um objeto de bytes, com estilo aprimorado.
+    Gera o gráfico de candlestick e o retorna como um objeto de bytes.
     """
     # Níveis de Pivô (apenas o último ponto)
-    pivots = df.iloc[-1]
     pivot_levels = [
-        pivots.get('PP'), pivots.get('S1'), pivots.get('R1'),
-        pivots.get('S2'), pivots.get('R2')
+        df['PP'].iloc[-1], df['S1'].iloc[-1], df['R1'].iloc[-1],
+        df['S2'].iloc[-1], df['R2'].iloc[-1]
     ]
-    # Filtra níveis nulos caso algum cálculo tenha falhado
-    pivot_levels = [p for p in pivot_levels if p is not None]
-    
-    # Cores e estilos mais distintos para os níveis de pivô
-    pivot_colors = ['#1f77b4', '#2ca02c', '#d62728', '#98df8a', '#ff9896'] # Azul, Verde, Vermelho, Verde Claro, Vermelho Claro
+    pivot_colors = ['blue', 'green', 'red', 'darkgreen', 'darkred']
     pivot_styles = [':', '--', '--', '-.', '-.']
 
     # --- Adiciona plots dos indicadores (com verificação) ---
@@ -107,27 +160,19 @@ def plotar_grafico(df: pd.DataFrame, ativo_nome: str, theme: str = "Claro") -> b
     ifr_col = f'RSI_{RSI_PERIOD}'
     if ifr_col in df.columns:
         add_plots.extend([
-            mpf.make_addplot(df[ifr_col], panel=2, color='blue', ylabel=f'IFR({RSI_PERIOD})', width=0.8),
-            mpf.make_addplot([RSI_OVERBOUGHT] * len(df), panel=2, color='red', linestyle='--', width=1.2),
-            mpf.make_addplot([RSI_OVERSOLD] * len(df), panel=2, color='green', linestyle='--', width=1.2)
+            mpf.make_addplot(df[ifr_col], panel=2, color='blue', ylabel=f'IFR({RSI_PERIOD})'),
+            mpf.make_addplot([RSI_OVERBOUGHT] * len(df), panel=2, color='red', linestyle='--'),
+            mpf.make_addplot([RSI_OVERSOLD] * len(df), panel=2, color='green', linestyle='--')
         ])
+
 
     # Configuração de estilo do gráfico com base no tema
     if theme == "Escuro":
-        # Tema escuro com cores de alto contraste
         mc = mpf.make_marketcolors(up='#00ff00', down='#ff0000', inherit=True)
-        s = mpf.make_mpf_style(
-            base_mpf_style='nightclouds', marketcolors=mc, gridstyle=':', y_on_right=False,
-            rc={'axes.labelcolor': 'white', 'xtick.color': 'white', 'ytick.color': 'white'}
-        )
-        watermark_color = 'white'
+        s = mpf.make_mpf_style(base_mpf_style='nightclouds', marketcolors=mc, gridstyle=':', y_on_right=False)
     else: # Padrão é o tema Claro
-        # Tema claro e limpo, baseado no estilo do Yahoo Finance
         mc = mpf.make_marketcolors(up='green', down='red', inherit=True)
-        s = mpf.make_mpf_style(
-            base_mpf_style='yahoo', marketcolors=mc, gridstyle='--', y_on_right=False
-        )
-        watermark_color = 'gray'
+        s = mpf.make_mpf_style(marketcolors=mc, gridstyle=':', y_on_right=False)
 
     # Salva a figura em um buffer de bytes para exibir no Streamlit
     buf = BytesIO()
@@ -135,18 +180,16 @@ def plotar_grafico(df: pd.DataFrame, ativo_nome: str, theme: str = "Claro") -> b
         df,
         type='candle',
         style=s,
-        title=f"\nAnálise Técnica: {ativo_nome}", # Adiciona espaço no topo
+        title=f'Análise Técnica: {ativo_nome}',
         ylabel='Preço (R$)',
         volume=True,
-        ylabel_lower='Volume',
         mav=(MA_FAST, MA_SLOW),
         addplot=add_plots,
-        hlines=dict(hlines=pivot_levels, colors=pivot_colors, linestyle=pivot_styles, alpha=0.8, linewidths=1.2),
+        hlines=dict(hlines=pivot_levels, colors=pivot_colors, linestyle=pivot_styles, alpha=0.7),
         show_nontrading=False,
-        figscale=1.8, # Gráfico maior e mais nítido
-        panel_ratios=(4, 1), # Mais espaço para o gráfico de preço
-        watermark=dict(text="Brava", color=watermark_color, alpha=0.3, fontsize=12),
-        savefig=dict(fname=buf, format='png', bbox_inches='tight') # bbox_inches para evitar cortes
+        figscale=1.5,
+        panel_ratios=(3, 1), # Aumenta o espaço do gráfico de preço
+        savefig=dict(fname=buf, format='png')
     )
     buf.seek(0)
     return buf.getvalue()
@@ -203,7 +246,6 @@ def main():
 
     with st.spinner(f"Buscando e analisando dados de {ativo_input}..."):
         df_processado = carregar_e_processar_dados(ticker_yf, start_date, date.today())
-        timestamp_geracao = pd.Timestamp.now()
 
         if df_processado is None or df_processado.empty:
             # A função carregar_e_processar_dados já exibe um erro
@@ -213,7 +255,7 @@ def main():
         st.header(f"Resultado da Análise para {ativo_input}")
 
         # Geração do relatório e do gráfico
-        relatorio_texto = gerar_relatorio_analise(df_processado, ticker_yf, timestamp_geracao)
+        relatorio_texto = gerar_relatorio_analise(df_processado, ticker_yf)
         fig_bytes = plotar_grafico(df_processado, ativo_input, theme=tema_grafico)
 
         # Organiza a saída em abas
@@ -235,8 +277,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
 
 
 
