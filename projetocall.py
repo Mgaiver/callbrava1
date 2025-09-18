@@ -159,8 +159,8 @@ def plotar_grafico(df, ativo_nome):
 
 def main():
     st.set_page_config(page_title="Analisador Técnico B3", layout="wide")
-    st.title("📈 Analisador Técnico de Ativos B3")
-    st.markdown("Insira o código do ativo para análise de IFR e Níveis de Suporte/Resistência.")
+    st.title("📈 Call Brava")
+    st.markdown("Insira o código do ativo e receba sua análise técnica.")
 
     # --- ENTRADA DO USUÁRIO ---
     col1, col2 = st.columns([1, 2])
@@ -212,7 +212,7 @@ def main():
                 df['Volume Medio Mensal'] = df['Volume'].rolling(window=21).mean()
                 
                 # C. GERAR SINAL
-                sinal_resumo, mensagem, referencias = gerar_mensagem_sinal(df.copy(), TICKER_YFINANCE)
+                relatorio_texto = gerar_mensagem_sinal(df.copy(), TICKER_YFINANCE)
                 
                 # D. PLOTAGEM (adaptada para Streamlit)
                 fig_bytes = plotar_grafico(df, ativo_input)
@@ -220,10 +220,8 @@ def main():
                 # --- SAÍDA ---
                 st.subheader(f"Resultado da Análise para {ativo_input}")
                 
-                # Exibir Sinal
-                st.markdown(f"**SINAL PRINCIPAL:** {sinal_resumo}")
-                st.markdown(mensagem)
-                st.info(f"Níveis de Referência (PP, S/R): {referencias}")
+                # Exibir Relatório
+                st.markdown(relatorio_texto, unsafe_allow_html=True)
                 
                 # Exibir Gráfico
                 st.image(fig_bytes, caption=f"Gráfico de Candlestick com IFR, Fibonacci e Pivô ({periodo})")
