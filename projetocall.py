@@ -42,8 +42,24 @@ def carregar_e_processar_dados(ticker: str, start_date: date, end_date: date) ->
         st.error(f"Ocorreu um erro ao buscar os dados: {e}")
         return None
 
-    # Garante que as colunas estão com nomes corretos
-    df.columns = [col.capitalize() for col in df.columns]
+    # Lida com colunas MultiIndex que o yfinance pode retornar
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.droplevel(0)
+
+    # Garante que as colunas estão com nomes padronizados de forma segura
+    try:
+        df.columns = [str(col).strip().title() for col in df.columns]
+    except Exception as e:
+        st.error(f"Não foi possível padronizar os nomes das colunas. Erro: {e}")
+        st.warning(f"Colunas recebidas do provedor de dados: {list(df.columns)}")
+        return None # Interrompe a execução se a renomeação falhar
+
+    # Verifica se as colunas essenciais para o cálculo existem
+    required_cols = ['High', 'Low', 'Close', 'Volume']
+    if not all(col in df.columns for col in required_cols):
+        st.error("Os dados recebidos não contêm as colunas essenciais (High, Low, Close, Volume) após a padronização.")
+        st.info(f"Colunas encontradas: {list(df.columns)}")
+        return None
 
     # Calcula Pontos de Pivô Clássico
     df['PP'] = (df['High'] + df['Low'] + df['Close']) / 3
@@ -282,4 +298,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
 
